@@ -285,6 +285,29 @@ html, body {
     content: "#";
 }
 
+.note-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-sm);
+}
+
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    background: rgba(88, 166, 255, 0.12);
+    color: var(--accent-blue);
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.tag-badge::before {
+    content: "#";
+    margin-right: 2px;
+}
+
 .note-actions {
     display: flex;
     gap: var(--spacing-xs);

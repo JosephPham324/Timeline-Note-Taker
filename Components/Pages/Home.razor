@@ -2,6 +2,8 @@
 @using Timeline_Note_Taker.Models
 @using Timeline_Note_Taker.Components.Shared
 @inject Timeline_Note_Taker.Services.DatabaseService DbService
+@inject Timeline_Note_Taker.Services.NoteEventService NoteEventService
+@implements IDisposable
 
 <div class="timeline-container">
     <AddNote OnNoteSaved="OnNoteSaved" />
@@ -59,8 +61,26 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Subscribe to note saved events
+        NoteEventService.NoteSaved += OnNoteEventTriggered;
+        
         await LoadTopics();
         await LoadNotes();
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events
+        NoteEventService.NoteSaved -= OnNoteEventTriggered;
+    }
+
+    private async void OnNoteEventTriggered()
+    {
+        // Refresh timeline when note is saved from Quick Note window
+        await InvokeAsync(async () =>
+        {
+            await OnNoteSaved();
+        });
     }
 
     private async Task LoadTopics()

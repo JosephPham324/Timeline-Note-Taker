@@ -13,6 +13,16 @@
         </div>
     </div>
     
+    @if (!string.IsNullOrWhiteSpace(Note.Tags))
+    {
+        <div class="note-tags">
+            @foreach (var tag in Note.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                <span class="tag-badge">@tag.Trim()</span>
+            }
+        </div>
+    }
+    
     <div class="note-content @(Note.Type == NoteType.CodeSnippet ? "code-content" : "")">
         @Note.Content
     </div>
