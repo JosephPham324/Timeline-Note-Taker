@@ -1,0 +1,48 @@
+@using Timeline_Note_Taker.Models
+
+<div class="note-card" data-type="@Note.Type.ToString().ToLower()">
+    <div class="note-header">
+        <div class="note-meta">
+            <span class="note-time">@GetRelativeTime(Note.CreatedAt)</span>
+            <span class="note-type-badge @Note.Type.ToString().ToLower()">@Note.Type</span>
+        </div>
+        <div class="note-actions">
+            <button class="btn btn-icon btn-danger" @onclick="DeleteNote" title="Delete">
+                🗑️
+            </button>
+        </div>
+    </div>
+    
+    <div class="note-content @(Note.Type == NoteType.CodeSnippet ? "code-content" : "")">
+        @Note.Content
+    </div>
+    
+    @if (!string.IsNullOrEmpty(Note.Topic))
+    {
+        <div class="note-footer">
+            <span class="note-topic">@Note.Topic</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Note Note { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnDeleted { get; set; }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        // Show time for today, date+time for other days
+        if (dateTime.Date == DateTime.Today)
+            return dateTime.ToString("h:mm tt");
+        
+        return dateTime.ToString("MMM d, h:mm tt");
+    }
+
+    private async Task DeleteNote()
+    {
+        await OnDeleted.InvokeAsync();
+    }
+}

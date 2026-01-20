@@ -1,0 +1,102 @@
+@using Timeline_Note_Taker.Models
+@inject Timeline_Note_Taker.Services.DatabaseService DbService
+
+<div class="add-note-container">
+    <textarea class="add-note-input" 
+              @bind="noteContent" 
+              @bind:event="oninput"
+              placeholder="What's on your mind? Start typing to add a note..."></textarea>
+    
+    <div class="add-note-toolbar">
+        <div class="note-type-selector">
+            @foreach (var type in Enum.GetValues<NoteType>())
+            {
+                <button class="type-btn @(selectedType == type ? "active" : "")"
+                        @onclick="() => selectedType = type">
+                    @GetTypeIcon(type) @type.ToString()
+                </button>
+            }
+        </div>
+        
+        <div class="topic-selector">
+            <input type="text" 
+                   class="topic-input" 
+                   list="topic-suggestions"
+                   @bind="topic" 
+                   @bind:event="oninput"
+                   @onfocus="LoadTopics"
+                   placeholder="Topic (optional)" />
+            <datalist id="topic-suggestions">
+                @foreach (var existingTopic in existingTopics)
+                {
+                    <option value="@existingTopic" />
+                }
+            </datalist>
+        </div>
+        
+        <button class="btn btn-primary" 
+                @onclick="SaveNote"
+                disabled="@string.IsNullOrWhiteSpace(noteContent)">
+            ➕ Add Note
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnNoteSaved { get; set; }
+
+    private string noteContent = string.Empty;
+    private string topic = string.Empty;
+    private NoteType selectedType = NoteType.Text;
+    private List<string> existingTopics = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTopics();
+    }
+
+    private async Task LoadTopics()
+    {
+        existingTopics = await DbService.GetAllTopicsAsync();
+    }
+
+    private string GetTypeIcon(NoteType type) => type switch
+    {
+        NoteType.Text => "📝",
+        NoteType.CodeSnippet => "💻",
+        NoteType.Image => "🖼️",
+        NoteType.Link => "🔗",
+        _ => "📝"
+    };
+
+    private async Task SaveNote()
+    {
+        if (string.IsNullOrWhiteSpace(noteContent))
+            return;
+
+        var note = new Note
+        {
+            Content = noteContent.Trim(),
+            Type = selectedType,
+            Topic = string.IsNullOrWhiteSpace(topic) ? null : topic.Trim(),
+            CreatedAt = DateTime.Now
+        };
+
+        await DbService.SaveNoteAsync(note);
+
+        // Refresh topics list if new topic was added
+        if (!string.IsNullOrWhiteSpace(topic) && !existingTopics.Contains(topic.Trim()))
+        {
+            await LoadTopics();
+        }
+
+        // Reset form
+        noteContent = string.Empty;
+        topic = string.Empty;
+        selectedType = NoteType.Text;
+
+        // Notify parent to refresh
+        await OnNoteSaved.InvokeAsync();
+    }
+}

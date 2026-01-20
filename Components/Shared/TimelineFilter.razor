@@ -1,0 +1,129 @@
+@using Timeline_Note_Taker.Models
+
+<div class="filter-bar">
+    <div class="filter-group">
+        <button class="filter-btn @(DateFilter == DateFilterOption.Today ? "active" : "")"
+                @onclick="() => SetDateFilter(DateFilterOption.Today)">
+            Today
+        </button>
+        <button class="filter-btn @(DateFilter == DateFilterOption.ThisWeek ? "active" : "")"
+                @onclick="() => SetDateFilter(DateFilterOption.ThisWeek)">
+            This Week
+        </button>
+        <button class="filter-btn @(DateFilter == DateFilterOption.ThisMonth ? "active" : "")"
+                @onclick="() => SetDateFilter(DateFilterOption.ThisMonth)">
+            This Month
+        </button>
+        <button class="filter-btn @(DateFilter == DateFilterOption.All ? "active" : "")"
+                @onclick="() => SetDateFilter(DateFilterOption.All)">
+            All
+        </button>
+    </div>
+    
+    <select class="filter-select" @bind="selectedTopic" @bind:after="OnTopicChanged">
+        <option value="">All Topics</option>
+        @foreach (var topic in Topics)
+        {
+            <option value="@topic">@topic</option>
+        }
+    </select>
+    
+    <select class="filter-select" @bind="selectedTypeId" @bind:after="OnTypeChanged">
+        <option value="-1">All Types</option>
+        @foreach (var type in Enum.GetValues<NoteType>())
+        {
+            <option value="@((int)type)">@GetTypeIcon(type) @type</option>
+        }
+    </select>
+    
+    <input type="text" 
+           class="search-input" 
+           @bind="searchTerm" 
+           @bind:event="oninput"
+           @onkeyup="OnSearchChanged"
+           placeholder="Search notes..." />
+</div>
+
+@code {
+    [Parameter]
+    public DateFilterOption DateFilter { get; set; } = DateFilterOption.Today;
+
+    [Parameter]
+    public EventCallback<DateFilterOption> DateFilterChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnSearch { get; set; }
+
+    [Parameter]
+    public List<string> Topics { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<string?> OnTopicFilterChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<NoteType?> OnTypeFilterChanged { get; set; }
+
+    private string searchTerm = string.Empty;
+    private string selectedTopic = string.Empty;
+    private int selectedTypeId = -1;
+    private System.Timers.Timer? debounceTimer;
+
+    private string GetTypeIcon(NoteType type) => type switch
+    {
+        NoteType.Text => "📝",
+        NoteType.CodeSnippet => "💻",
+        NoteType.Image => "🖼️",
+        NoteType.Link => "🔗",
+        _ => "📝"
+    };
+
+    private async Task SetDateFilter(DateFilterOption option)
+    {
+        DateFilter = option;
+        await DateFilterChanged.InvokeAsync(option);
+    }
+
+    private async Task OnTopicChanged()
+    {
+        var topicValue = string.IsNullOrEmpty(selectedTopic) ? null : selectedTopic;
+        await OnTopicFilterChanged.InvokeAsync(topicValue);
+    }
+
+    private async Task OnTypeChanged()
+    {
+        NoteType? typeValue = selectedTypeId == -1 ? null : (NoteType)selectedTypeId;
+        await OnTypeFilterChanged.InvokeAsync(typeValue);
+    }
+
+    private void OnSearchChanged()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+        
+        debounceTimer = new System.Timers.Timer(300);
+        debounceTimer.Elapsed += async (sender, e) =>
+        {
+            debounceTimer?.Stop();
+            await InvokeAsync(async () =>
+            {
+                await OnSearch.InvokeAsync(searchTerm);
+            });
+        };
+        debounceTimer.AutoReset = false;
+        debounceTimer.Start();
+    }
+
+    public void Dispose()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+    }
+
+    public enum DateFilterOption
+    {
+        Today,
+        ThisWeek,
+        ThisMonth,
+        All
+    }
+}

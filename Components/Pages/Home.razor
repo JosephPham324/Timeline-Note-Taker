@@ -1,0 +1,173 @@
+﻿@page "/"
+@using Timeline_Note_Taker.Models
+@using Timeline_Note_Taker.Components.Shared
+@inject Timeline_Note_Taker.Services.DatabaseService DbService
+
+<div class="timeline-container">
+    <AddNote OnNoteSaved="OnNoteSaved" />
+    
+    <TimelineFilter DateFilter="@currentFilter" 
+                    DateFilterChanged="OnFilterChanged" 
+                    OnSearch="OnSearch"
+                    Topics="@allTopics"
+                    OnTopicFilterChanged="OnTopicFilterChanged"
+                    OnTypeFilterChanged="OnTypeFilterChanged" />
+    
+    @if (isLoading)
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">⏳</div>
+            <h3>Loading notes...</h3>
+        </div>
+    }
+    else if (!groupedNotes.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">📝</div>
+            <h3>No notes yet</h3>
+            <p>Start capturing your thoughts above. They'll appear here in your timeline.</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var group in groupedNotes)
+        {
+            <div class="timeline-date-group">
+                <div class="timeline-date-header">
+                    @GetDateLabel(group.Key)
+                </div>
+                <div class="timeline-list">
+                    @foreach (var note in group)
+                    {
+                        <NoteCard Note="@note" OnDeleted="() => DeleteNote(note)" />
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<Note> notes = new();
+    private List<string> allTopics = new();
+    private IEnumerable<IGrouping<DateTime, Note>> groupedNotes = Enumerable.Empty<IGrouping<DateTime, Note>>();
+    private TimelineFilter.DateFilterOption currentFilter = TimelineFilter.DateFilterOption.Today;
+    private string searchTerm = string.Empty;
+    private string? topicFilter = null;
+    private NoteType? typeFilter = null;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTopics();
+        await LoadNotes();
+    }
+
+    private async Task LoadTopics()
+    {
+        allTopics = await DbService.GetAllTopicsAsync();
+    }
+
+    private async Task OnNoteSaved()
+    {
+        await LoadTopics();
+        await LoadNotes();
+    }
+
+    private async Task LoadNotes()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        notes = currentFilter switch
+        {
+            TimelineFilter.DateFilterOption.Today => await DbService.GetTodaysNotesAsync(),
+            TimelineFilter.DateFilterOption.ThisWeek => await DbService.GetThisWeeksNotesAsync(),
+            TimelineFilter.DateFilterOption.ThisMonth => await GetThisMonthsNotes(),
+            _ => await DbService.GetAllNotesAsync()
+        };
+
+        // Apply topic filter
+        if (!string.IsNullOrEmpty(topicFilter))
+        {
+            notes = notes.Where(n => n.Topic == topicFilter).ToList();
+        }
+
+        // Apply type filter
+        if (typeFilter.HasValue)
+        {
+            notes = notes.Where(n => n.Type == typeFilter.Value).ToList();
+        }
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var lowerSearch = searchTerm.ToLower();
+            notes = notes.Where(n =>
+                (n.Content?.ToLower().Contains(lowerSearch) ?? false) ||
+                (n.Topic?.ToLower().Contains(lowerSearch) ?? false)
+            ).ToList();
+        }
+
+        // Group by date
+        groupedNotes = notes.GroupBy(n => n.CreatedAt.Date)
+                           .OrderByDescending(g => g.Key);
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task<List<Note>> GetThisMonthsNotes()
+    {
+        var today = DateTime.Today;
+        var startOfMonth = new DateTime(today.Year, today.Month, 1);
+        var endOfMonth = startOfMonth.AddMonths(1);
+        return await DbService.GetNotesByDateRangeAsync(startOfMonth, endOfMonth);
+    }
+
+    private async Task OnFilterChanged(TimelineFilter.DateFilterOption filter)
+    {
+        currentFilter = filter;
+        await LoadNotes();
+    }
+
+    private async Task OnSearch(string term)
+    {
+        searchTerm = term;
+        await LoadNotes();
+    }
+
+    private async Task OnTopicFilterChanged(string? topic)
+    {
+        topicFilter = topic;
+        await LoadNotes();
+    }
+
+    private async Task OnTypeFilterChanged(NoteType? type)
+    {
+        typeFilter = type;
+        await LoadNotes();
+    }
+
+    private async Task DeleteNote(Note note)
+    {
+        await DbService.DeleteNoteAsync(note);
+        await LoadNotes();
+    }
+
+    private string GetDateLabel(DateTime date)
+    {
+        var today = DateTime.Today;
+        
+        if (date == today)
+            return "Today";
+        if (date == today.AddDays(-1))
+            return "Yesterday";
+        if (date > today.AddDays(-7))
+            return date.ToString("dddd");
+        if (date.Year == today.Year)
+            return date.ToString("MMMM d");
+        
+        return date.ToString("MMMM d, yyyy");
+    }
+}
