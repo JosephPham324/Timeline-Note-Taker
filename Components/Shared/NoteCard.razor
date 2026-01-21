@@ -36,12 +36,21 @@
     }
 </div>
 
+@using Markdig
+
 @code {
     [Parameter, EditorRequired]
     public Note Note { get; set; } = default!;
 
     [Parameter]
     public EventCallback OnDeleted { get; set; }
+    
+    // Cache the pipeline
+    private static MarkdownPipeline? _pipeline;
+    private static MarkdownPipeline Pipeline => _pipeline ??= new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseSoftlineBreakAsHardlineBreak()
+        .Build();
 
     private string GetRelativeTime(DateTime dateTime)
     {
@@ -57,51 +66,72 @@
         await OnDeleted.InvokeAsync();
     }
     
-    // Parse [Image: path] tags and replace with actual img elements
+    // Parse Markdown and handle [Image: path] tags
     private string RenderContentWithImages(string content)
     {
         if (string.IsNullOrEmpty(content)) return string.Empty;
         
-        // Basic HTML encoding for safety
-        var safeContent = System.Net.WebUtility.HtmlEncode(content);
+        // 1. Extract Images and replace with unique placeholders
+        var imageMatches = System.Text.RegularExpressions.Regex.Matches(content, @"\[Image:\s*(.*?)\]");
+        var imagePlaceholders = new Dictionary<string, string>();
         
-        // But we want to preserve newlines
-        safeContent = safeContent.Replace("\n", "<br/>");
+        var processedContent = content;
         
-        // Regex to find [Image: path]
-        // The path might contain spaces, so we capture everything until the closing bracket
-        var matches = System.Text.RegularExpressions.Regex.Matches(content, @"\[Image:\s*(.*?)\]");
-        
-        if (matches.Count == 0) return safeContent;
-        
-        // We'll replace the encoded tags with proper HTML
-        foreach (System.Text.RegularExpressions.Match match in matches)
+        // We iterate in reverse or just replace one by one carefully. 
+        // Unique placeholders using GUIDs to avoid Markdown collision
+        int index = 0;
+        foreach (System.Text.RegularExpressions.Match match in imageMatches)
         {
-            var fullTag = match.Value;
-            var imagePath = match.Groups[1].Value;
-            var encodedTag = System.Net.WebUtility.HtmlEncode(fullTag);
+            var placeholder = $"__IMG_PLACEHOLDER_{Guid.NewGuid()}__";
+            // Replace only the first occurrence of this specific match value to handle duplicates correctly if needed,
+            // but Regex.Replace replaces all. Since fullTag is the specific string, safely replacing one by one or using index logic is better.
+            // Let's use a simpler approach: Replace the exact string. If duplicates exist, they point to same image anyway.
             
-            try 
+            if (!imagePlaceholders.ContainsKey(match.Value))
             {
-                if (System.IO.File.Exists(imagePath))
-                {
-                    var bytes = System.IO.File.ReadAllBytes(imagePath);
-                    var base64 = Convert.ToBase64String(bytes);
-                    var imgHtml = $"<div class='note-image'><img src='data:image/png;base64,{base64}' alt='Attached Image' /></div>";
-                    
-                    safeContent = safeContent.Replace(encodedTag, imgHtml);
-                }
-                else
-                {
-                    safeContent = safeContent.Replace(encodedTag, $"<div class='image-error'>Image not found: {Path.GetFileName(imagePath)}</div>");
-                }
-            }
-            catch
-            {
-                safeContent = safeContent.Replace(encodedTag, $"<div class='image-error'>Error loading image</div>");
+                imagePlaceholders[match.Value] = placeholder;
+                processedContent = processedContent.Replace(match.Value, placeholder);
             }
         }
         
-        return safeContent;
+        // 2. Render Markdown
+        // Note: Markdown encoding handles HTML safety
+        string html = Markdown.ToHtml(processedContent, Pipeline);
+        
+        // 3. Restore Images (Injecting raw HTML)
+        foreach (var kvp in imagePlaceholders)
+        {
+            var originalTag = kvp.Key; // [Image: path]
+            var placeholder = kvp.Value;
+            
+            // Extract path again from original tag
+            var match = System.Text.RegularExpressions.Regex.Match(originalTag, @"\[Image:\s*(.*?)\]");
+            if (match.Success)
+            {
+                var imagePath = match.Groups[1].Value;
+                string imgHtml;
+                try 
+                {
+                    if (System.IO.File.Exists(imagePath))
+                    {
+                        var bytes = System.IO.File.ReadAllBytes(imagePath);
+                        var base64 = Convert.ToBase64String(bytes);
+                        imgHtml = $"<div class='note-image'><img src='data:image/png;base64,{base64}' alt='Attached Image' /></div>";
+                    }
+                    else
+                    {
+                        imgHtml = $"<div class='image-error'>Image not found: {Path.GetFileName(imagePath)}</div>";
+                    }
+                }
+                catch
+                {
+                    imgHtml = $"<div class='image-error'>Error loading image</div>";
+                }
+                
+                html = html.Replace(placeholder, imgHtml);
+            }
+        }
+        
+        return html;
     }
 }

@@ -24,6 +24,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<NoteEventService>();
         builder.Services.AddSingleton<ISettingsService, SettingsService>();
         builder.Services.AddSingleton<LocalizationService>();
+        builder.Services.AddSingleton<IClipboardService, ClipboardService>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
