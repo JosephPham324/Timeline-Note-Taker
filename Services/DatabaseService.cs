@@ -26,6 +26,11 @@ public class DatabaseService
     public async Task<int> SaveNoteAsync(Note note)
     {
         await InitAsync();
+        
+        // Coerce topic and tags to lowercase
+        if (note.Topic != null) note.Topic = note.Topic.ToLower();
+        if (note.Tags != null) note.Tags = note.Tags.ToLower();
+        
         if (note.Id == 0)
         {
             note.CreatedAt = DateTime.Now;

@@ -3,12 +3,13 @@
 @using Timeline_Note_Taker.Components.Shared
 @inject Timeline_Note_Taker.Services.DatabaseService DbService
 @inject Timeline_Note_Taker.Services.NoteEventService NoteEventService
+@inject Timeline_Note_Taker.Services.LocalizationService Loc
 @implements IDisposable
 
 <div class="timeline-container">
     <div class="app-header">
-        <h1>Timeline</h1>
-        <a href="/settings" class="btn btn-icon settings-btn" title="Settings">⚙️</a>
+        <h1>@Loc["app_title"]</h1>
+        <a href="/settings" class="btn btn-icon settings-btn" title="@Loc["settings_title"]">⚙️</a>
     </div>
 
     <AddNote OnNoteSaved="OnNoteSaved" />
@@ -16,6 +17,9 @@
     <TimelineFilter DateFilter="@currentFilter" 
                     DateFilterChanged="OnFilterChanged" 
                     OnSearch="OnSearch"
+                    OnWeekFiltered="OnWeekFiltered"
+                    OnMonthFiltered="OnMonthFiltered"
+                    OnTimeFiltered="OnTimeFiltered"
                     Topics="@allTopics"
                     OnTopicFilterChanged="OnTopicFilterChanged"
                     OnTypeFilterChanged="OnTypeFilterChanged" />
@@ -24,15 +28,15 @@
     {
         <div class="empty-state">
             <div class="empty-state-icon">⏳</div>
-            <h3>Loading notes...</h3>
+            <h3>@Loc["empty_state_loading"]</h3>
         </div>
     }
     else if (!groupedNotes.Any())
     {
         <div class="empty-state">
             <div class="empty-state-icon">📝</div>
-            <h3>No notes yet</h3>
-            <p>Start capturing your thoughts above. They'll appear here in your timeline.</p>
+            <h3>@Loc["empty_state_no_notes"]</h3>
+            <p>@Loc["empty_state_start"]</p>
         </div>
     }
     else
@@ -64,19 +68,25 @@
     private NoteType? typeFilter = null;
     private bool isLoading = true;
 
-    protected override async Task OnInitializedAsync()
-    {
-        // Subscribe to note saved events
-        NoteEventService.NoteSaved += OnNoteEventTriggered;
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     // Subscribe to note saved events
+    //     NoteEventService.NoteSaved += OnNoteEventTriggered;
         
-        await LoadTopics();
-        await LoadNotes();
-    }
+    //     await LoadTopics();
+    //     await LoadNotes();
+    // }
 
     public void Dispose()
     {
         // Unsubscribe from events
         NoteEventService.NoteSaved -= OnNoteEventTriggered;
+        Loc.OnLanguageChanged -= OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private async void OnNoteEventTriggered()
@@ -102,18 +112,105 @@
         await LoadNotes();
     }
 
+    // Filter state
+    private DateTime? weeklyStart;
+    private DateTime? weeklyEnd;
+    private DateTime? monthlyStart;
+    private DateTime? monthlyEnd;
+    private TimeSpan? filterStartTime;
+    private TimeSpan? filterEndTime;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to note saved events
+        NoteEventService.NoteSaved += OnNoteEventTriggered;
+        Loc.OnLanguageChanged += OnLanguageChanged;
+        
+        await LoadTopics();
+        await LoadNotes();
+    }
+    
+    // ... Dispose and OnNoteEventTriggered ... 
+
+    private async Task OnWeekFiltered((DateTime Start, DateTime End) range)
+    {
+        weeklyStart = range.Start;
+        weeklyEnd = range.End;
+        await LoadNotes();
+    }
+
+    private async Task OnMonthFiltered((DateTime Start, DateTime End) range)
+    {
+        monthlyStart = range.Start;
+        monthlyEnd = range.End;
+        await LoadNotes();
+    }
+
+    private async Task OnTimeFiltered((TimeSpan? Start, TimeSpan? End) range)
+    {
+        filterStartTime = range.Start;
+        filterEndTime = range.End;
+        await LoadNotes();
+    }
+
     private async Task LoadNotes()
     {
         isLoading = true;
         StateHasChanged();
 
-        notes = currentFilter switch
+        // 1. Get Base Set by Date
+        List<Note> fetchedNotes;
+        
+        if (currentFilter == TimelineFilter.DateFilterOption.Today)
         {
-            TimelineFilter.DateFilterOption.Today => await DbService.GetTodaysNotesAsync(),
-            TimelineFilter.DateFilterOption.ThisWeek => await DbService.GetThisWeeksNotesAsync(),
-            TimelineFilter.DateFilterOption.ThisMonth => await GetThisMonthsNotes(),
-            _ => await DbService.GetAllNotesAsync()
-        };
+            fetchedNotes = await DbService.GetTodaysNotesAsync();
+        }
+        else if (currentFilter == TimelineFilter.DateFilterOption.ThisWeek)
+        {
+            // If we have a custom week selected, use it. Otherwise default to this week logic (fallback)
+            if (weeklyStart.HasValue && weeklyEnd.HasValue)
+            {
+                // Add 1 day to end date to include the full day (since timestamps vary)
+                // Actually GetNotesByDateRangeAsync handles strict comparison usually.
+                // DbService comparison is (n.CreatedAt >= startDate && n.CreatedAt <= endDate)
+                // If endDate is at 00:00:00, it misses the day. So ensure end of day.
+                var endOfRange = weeklyEnd.Value.Date.AddDays(1).AddTicks(-1);
+                fetchedNotes = await DbService.GetNotesByDateRangeAsync(weeklyStart.Value, endOfRange);
+            }
+            else
+            {
+                fetchedNotes = await DbService.GetThisWeeksNotesAsync();
+            }
+        }
+        else if (currentFilter == TimelineFilter.DateFilterOption.ThisMonth)
+        {
+             if (monthlyStart.HasValue && monthlyEnd.HasValue)
+            {
+                 fetchedNotes = await DbService.GetNotesByDateRangeAsync(monthlyStart.Value, monthlyEnd.Value);
+            }
+            else
+            {
+                 fetchedNotes = await GetThisMonthsNotes();
+            }
+        }
+        else
+        {
+            fetchedNotes = await DbService.GetAllNotesAsync();
+        }
+
+        notes = fetchedNotes;
+
+        // 2. Apply In-Memory Filters (Time, Topic, Type, Search)
+
+        // Time Filter
+        if (filterStartTime.HasValue)
+        {
+            notes = notes.Where(n => n.CreatedAt.TimeOfDay >= filterStartTime.Value).ToList();
+        }
+        if (filterEndTime.HasValue)
+        {
+            notes = notes.Where(n => n.CreatedAt.TimeOfDay <= filterEndTime.Value).ToList();
+        }
 
         // Apply topic filter
         if (!string.IsNullOrEmpty(topicFilter))
@@ -133,7 +230,8 @@
             var lowerSearch = searchTerm.ToLower();
             notes = notes.Where(n =>
                 (n.Content?.ToLower().Contains(lowerSearch) ?? false) ||
-                (n.Topic?.ToLower().Contains(lowerSearch) ?? false)
+                (n.Topic?.ToLower().Contains(lowerSearch) ?? false) ||
+                (n.Tags?.ToLower().Contains(lowerSearch) ?? false)
             ).ToList();
         }
 

@@ -4,6 +4,8 @@ namespace Timeline_Note_Taker.Services;
 
 public class SlashCommandParser
 {
+    private readonly ISettingsService _settingsService;
+
     // Matches #"quoted topic" or #unquoted followed by content
     private static readonly Regex QuotedHashtagRegex = new Regex(
         @"^#""([^""]+)""\s+(.+)$",
@@ -14,6 +16,11 @@ public class SlashCommandParser
         @"^#(\w+)\s+(.+)$",
         RegexOptions.Compiled
     );
+
+    public SlashCommandParser(ISettingsService settingsService)
+    {
+        _settingsService = settingsService;
+    }
 
     public (bool HasCommand, string? Topic, string? Content) Parse(string input)
     {
@@ -31,9 +38,12 @@ public class SlashCommandParser
             var topicString = quotedMatch.Groups[1].Value;
             var content = quotedMatch.Groups[2].Value;
             
-            // If there are semicolons, take the first topic for the Topic field
+            // If there are separators, take the first topic for the Topic field
             // and store all topics in Tags (for future use)
-            var firstTopic = topicString.Split(';')[0].Trim();
+            var separator = _settingsService.TopicSeparator;
+            // Handle split safely
+            var split = topicString.Split(new[] { separator }, StringSplitOptions.RemoveEmptyEntries);
+            var firstTopic = split.Length > 0 ? split[0].Trim() : topicString;
             
             return (true, firstTopic, content);
         }
@@ -64,8 +74,10 @@ public class SlashCommandParser
         if (quotedMatch.Success)
         {
             var topicString = quotedMatch.Groups[1].Value;
-            // Split by semicolon and trim each topic
-            topics = topicString.Split(';')
+            
+            // Split by user-defined separator and trim each topic
+            var separator = _settingsService.TopicSeparator;
+            topics = topicString.Split(new[] { separator }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(t => t.Trim())
                 .Where(t => !string.IsNullOrWhiteSpace(t))
                 .ToList();

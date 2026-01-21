@@ -204,6 +204,10 @@ public sealed partial class QuickNoteWindow : WinUIWindow
             note.AttachmentPath = clipboardContent.Url;
             note.Content = clipboardContent.UrlTitle ?? clipboardContent.Url ?? string.Empty;
         }
+        else if (note.Content.Contains("```"))
+        {
+            note.Type = NoteType.CodeSnippet;
+        }
         else
         {
             note.Type = NoteType.Text;

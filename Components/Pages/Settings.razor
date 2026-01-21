@@ -1,34 +1,52 @@
 @page "/settings"
 @inject Timeline_Note_Taker.Services.ISettingsService SettingsService
+@inject Timeline_Note_Taker.Services.LocalizationService Loc
 @inject IJSRuntime JSRuntime
 
 <div class="settings-container">
     <div class="header">
-        <h1>Settings</h1>
+        <h1>@Loc["settings_title"]</h1>
     </div>
 
     <div class="settings-section">
-        <h2>Storage</h2>
+        <h2>@Loc["settings_storage"]</h2>
         
         <div class="form-group">
-            <label for="attachmentsPath">Attachments Location</label>
+            <label for="attachmentsPath">@Loc["settings_attachments_location"]</label>
             <div class="input-group">
                 <input type="text" id="attachmentsPath" class="form-control" @bind="attachmentsPath" />
-                <button class="btn btn-secondary" @onclick="ResetToDefault">Reset</button>
+                <button class="btn btn-secondary" @onclick="ResetToDefault">@Loc["settings_reset"]</button>
             </div>
             <small class="help-text">Folder where screenshots and images will be saved.</small>
+        </div>
+        <div class="form-group">
+            <label for="topicSeparator">@Loc["settings_topic_separator"]</label>
+            <div class="input-group">
+                <input type="text" id="topicSeparator" class="form-control" @bind="topicSeparator" />
+                <button class="btn btn-secondary" @onclick="ResetSeparator">@Loc["settings_reset"]</button>
+            </div>
+            <small class="help-text">Character used to separate multiple topics (e.g., ; for #topic1;topic2). Cannot be empty.</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="language">@Loc["settings_language"]</label>
+            <select id="language" class="form-control" @bind="language">
+                <option value="en">English</option>
+                <option value="vi">Tiếng Việt (Vietnamese)</option>
+            </select>
+            <small class="help-text">Application language (requires restart).</small>
         </div>
     </div>
     
     <div class="actions">
-        <a href="/" class="btn btn-secondary">← Back to Timeline</a>
-        <button class="btn btn-primary" @onclick="SaveSettings">Save Settings</button>
+        <a href="/" class="btn btn-secondary">← @Loc["settings_back"]</a>
+        <button class="btn btn-primary" @onclick="SaveSettings">@Loc["settings_save"]</button>
     </div>
     
     @if (showSuccessMessage)
     {
         <div class="alert alert-success mt-3">
-            Settings saved successfully!
+            @Loc["settings_success"]
         </div>
     }
 </div>
@@ -94,13 +112,31 @@
     }
 </style>
 
+@implements IDisposable
+
 @code {
     private string attachmentsPath = "";
+    private string topicSeparator = "";
+    private string language = "en";
     private bool showSuccessMessage = false;
 
     protected override void OnInitialized()
     {
         attachmentsPath = SettingsService.AttachmentsDirectory;
+        topicSeparator = SettingsService.TopicSeparator;
+        language = SettingsService.Language;
+        
+        Loc.OnLanguageChanged += OnLanguageChanged;
+    }
+    
+    public void Dispose()
+    {
+        Loc.OnLanguageChanged -= OnLanguageChanged;
+    }
+    
+    private void OnLanguageChanged()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private void ResetToDefault()
@@ -108,9 +144,23 @@
         attachmentsPath = Path.Combine(FileSystem.AppDataDirectory, "attachments");
     }
 
+    private void ResetSeparator()
+    {
+        topicSeparator = ";";
+    }
+
     private async Task SaveSettings()
     {
+        if (string.IsNullOrWhiteSpace(topicSeparator))
+        {
+            // Simple validation feedback (could be better)
+            topicSeparator = ";"; 
+        }
+
         SettingsService.AttachmentsDirectory = attachmentsPath;
+        SettingsService.TopicSeparator = topicSeparator;
+        SettingsService.Language = language;
+        
         showSuccessMessage = true;
         await Task.Delay(3000);
         showSuccessMessage = false;

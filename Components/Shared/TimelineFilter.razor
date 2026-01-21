@@ -1,27 +1,53 @@
 @using Timeline_Note_Taker.Models
+@inject Timeline_Note_Taker.Services.ISettingsService SettingsService
+
+@inject Timeline_Note_Taker.Services.LocalizationService Loc
 
 <div class="filter-bar">
     <div class="filter-group">
         <button class="filter-btn @(DateFilter == DateFilterOption.Today ? "active" : "")"
                 @onclick="() => SetDateFilter(DateFilterOption.Today)">
-            Today
+            @Loc["filter_today"]
         </button>
         <button class="filter-btn @(DateFilter == DateFilterOption.ThisWeek ? "active" : "")"
                 @onclick="() => SetDateFilter(DateFilterOption.ThisWeek)">
-            This Week
+            @Loc["filter_weekly"]
         </button>
         <button class="filter-btn @(DateFilter == DateFilterOption.ThisMonth ? "active" : "")"
                 @onclick="() => SetDateFilter(DateFilterOption.ThisMonth)">
-            This Month
+            @Loc["filter_monthly"]
         </button>
         <button class="filter-btn @(DateFilter == DateFilterOption.All ? "active" : "")"
                 @onclick="() => SetDateFilter(DateFilterOption.All)">
-            All
+            @Loc["filter_all"]
         </button>
     </div>
     
+    @if (DateFilter == DateFilterOption.ThisWeek)
+    {
+        <select class="filter-select week-select" @onchange="OnWeekChanged">
+            @for (int i = 0; i < weekRanges.Count; i++)
+            {
+                var index = i;
+                <option value="@index" selected="@(index == selectedWeekIndex)">@weekRanges[i].Label</option>
+            }
+            <option value="-999">@Loc["load_more_weeks"]</option>
+        </select>
+    }
+    
+    @if (DateFilter == DateFilterOption.ThisMonth)
+    {
+         <input type="month" class="filter-select" @bind="selectedMonth" @bind:after="OnMonthChanged" />
+    }
+
+    <div class="time-filter">
+        <input type="time" class="time-input" @bind="startTime" @bind:after="OnTimeChanged" aria-label="Start Time" />
+        <span>-</span>
+        <input type="time" class="time-input" @bind="endTime" @bind:after="OnTimeChanged" aria-label="End Time" />
+    </div>
+
     <select class="filter-select" @bind="selectedTopic" @bind:after="OnTopicChanged">
-        <option value="">All Topics</option>
+        <option value="">@Loc["topic_optional"]</option>
         @foreach (var topic in Topics)
         {
             <option value="@topic">@topic</option>
@@ -41,8 +67,31 @@
            @bind="searchTerm" 
            @bind:event="oninput"
            @onkeyup="OnSearchChanged"
-           placeholder="Search notes..." />
+           placeholder="@Loc["search_placeholder"]" />
 </div>
+
+<style>
+    .time-filter {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        background: var(--surface);
+        padding: 0.25rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+    }
+    .time-input {
+        border: none;
+        background: transparent;
+        color: var(--text-primary);
+        font-size: 0.85rem;
+        padding: 0.25rem;
+        width: 100px;
+    }
+    .week-select {
+        min-width: 200px;
+    }
+</style>
 
 @code {
     [Parameter]
@@ -63,10 +112,88 @@
     [Parameter]
     public EventCallback<NoteType?> OnTypeFilterChanged { get; set; }
 
+    [Parameter]
+    public EventCallback<(DateTime Start, DateTime End)> OnWeekFiltered { get; set; }
+
+    [Parameter]
+    public EventCallback<(DateTime Start, DateTime End)> OnMonthFiltered { get; set; }
+
+    [Parameter]
+    public EventCallback<(TimeSpan? Start, TimeSpan? End)> OnTimeFiltered { get; set; }
+
     private string searchTerm = string.Empty;
     private string selectedTopic = string.Empty;
     private int selectedTypeId = -1;
     private System.Timers.Timer? debounceTimer;
+    
+    // Time filter
+    private TimeOnly? startTime;
+    private TimeOnly? endTime;
+
+    // Week filter
+    private List<(string Label, DateTime Start, DateTime End)> weekRanges = new();
+    private int selectedWeekIndex = 0;
+    
+    // Month filter
+    private DateTime selectedMonth = DateTime.Today;
+    private string language = "en";
+
+@implements IDisposable
+
+    protected override void OnInitialized()
+    {
+        language = SettingsService.Language;
+        Loc.OnLanguageChanged += OnLanguageChanged;
+        GenerateWeekRanges();
+    }
+    
+    public void Dispose()
+    {
+        Loc.OnLanguageChanged -= OnLanguageChanged;
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+    }
+
+    private void OnLanguageChanged()
+    {
+        GenerateWeekRanges();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void GenerateWeekRanges()
+    {
+        weekRanges.Clear();
+        var today = DateTime.Today;
+        // Start of current week (assuming Monday start, or Sunday? Let's use Local culture or Sunday)
+        var currentDayOfWeek = (int)today.DayOfWeek;
+        var startOfCurrentWeek = today.AddDays(-currentDayOfWeek); // Sunday
+        
+        // Generate current + past 11 weeks + next 1 week
+        // Order: newest first
+        
+        // Future (Next week)
+        AddWeekRange(startOfCurrentWeek.AddDays(7), Loc["filter_next_week"]);
+        
+        // Current
+        AddWeekRange(startOfCurrentWeek, Loc["filter_this_week"]);
+        // Past
+        for (int i = 1; i <= 12; i++)
+        {
+            var start = startOfCurrentWeek.AddDays(-7 * i);
+            string? label = i == 1 ? Loc["filter_last_week"] : null;
+            AddWeekRange(start, label);
+        }
+        
+        // Default to "This Week" (index 1)
+        selectedWeekIndex = 1;
+    }
+
+    private void AddWeekRange(DateTime start, string? label)
+    {
+        var end = start.AddDays(6);
+        var displayLabel = label ?? $"{start:d/M/yyyy} - {end:d/M/yyyy}";
+        weekRanges.Add((displayLabel, start, end));
+    }
 
     private string GetTypeIcon(NoteType type) => type switch
     {
@@ -81,6 +208,81 @@
     {
         DateFilter = option;
         await DateFilterChanged.InvokeAsync(option);
+        
+        // If switching to Weekly or Monthly, verify we trigger the range update too
+        if (option == DateFilterOption.ThisWeek)
+        {
+            await TriggerWeekUpdate();
+        }
+        else if (option == DateFilterOption.ThisMonth)
+        {
+            await TriggerMonthUpdate(); 
+        }
+    }
+
+    private async Task OnWeekChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int index))
+        {
+            if (index == -999)
+            {
+                // Load More
+                LoadMoreWeeks();
+                // Select the first of new batch or keep current?
+                // Actually if we append, the indices shift? No, we append to end.
+                // Let's set selection to the start of the new batch
+                selectedWeekIndex = weekRanges.Count - 12; 
+                // Restore selection logic might be needed, but for now simple refresh
+                StateHasChanged();
+            }
+            else
+            {
+                selectedWeekIndex = index;
+                await TriggerWeekUpdate();
+            }
+        }
+    }
+
+    private void LoadMoreWeeks()
+    {
+        if (!weekRanges.Any()) return;
+        
+        // Get the last week's start date
+        var lastWeek = weekRanges.Last();
+        var startOfLastWeek = lastWeek.Start;
+        
+        // Load 12 more past weeks
+        for (int i = 1; i <= 12; i++)
+        {
+            var start = startOfLastWeek.AddDays(-7 * i);
+            AddWeekRange(start, null);
+        }
+    }
+    
+    private async Task OnMonthChanged()
+    {
+        await TriggerMonthUpdate();
+    }
+    
+    private async Task TriggerMonthUpdate()
+    {
+        var start = new DateTime(selectedMonth.Year, selectedMonth.Month, 1);
+        var end = start.AddMonths(1).AddSeconds(-1);
+        await OnMonthFiltered.InvokeAsync((start, end));
+    }
+
+    private async Task TriggerWeekUpdate()
+    {
+        if (selectedWeekIndex >= 0 && selectedWeekIndex < weekRanges.Count)
+        {
+            var range = weekRanges[selectedWeekIndex];
+            await OnWeekFiltered.InvokeAsync((range.Start, range.End));
+        }
+    }
+
+    private async Task OnTimeChanged()
+    {
+        await OnTimeFiltered.InvokeAsync((startTime?.ToTimeSpan(), endTime?.ToTimeSpan()));
     }
 
     private async Task OnTopicChanged()
@@ -113,11 +315,7 @@
         debounceTimer.Start();
     }
 
-    public void Dispose()
-    {
-        debounceTimer?.Stop();
-        debounceTimer?.Dispose();
-    }
+
 
     public enum DateFilterOption
     {

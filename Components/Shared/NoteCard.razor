@@ -1,4 +1,5 @@
 @using Timeline_Note_Taker.Models
+@inject Timeline_Note_Taker.Services.LocalizationService Loc
 
 <div class="note-card" data-type="@Note.Type.ToString().ToLower()">
     <div class="note-header">
@@ -7,7 +8,7 @@
             <span class="note-type-badge @Note.Type.ToString().ToLower()">@Note.Type</span>
         </div>
         <div class="note-actions">
-            <button class="btn btn-icon btn-danger" @onclick="DeleteNote" title="Delete">
+            <button class="btn btn-icon btn-danger" @onclick="DeleteNote" title="@Loc["delete_tooltip"]">
                 🗑️
             </button>
         </div>

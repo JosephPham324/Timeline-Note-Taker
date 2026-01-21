@@ -3,7 +3,12 @@ namespace Timeline_Note_Taker.Services;
 public class SettingsService : ISettingsService
 {
     private const string AttachmentsDirectoryKey = "AttachmentsDirectory";
+    private const string LanguageKey = "Language";
+    private const string TopicSeparatorKey = "TopicSeparator";
+    
     private readonly string _defaultAttachmentsDirectory;
+    private readonly string _defaultLanguage = "en";
+    private readonly string _defaultTopicSeparator = ";";
 
     public SettingsService()
     {
@@ -36,6 +41,22 @@ public class SettingsService : ISettingsService
                     System.Diagnostics.Debug.WriteLine($"[Settings] Failed to create directory: {ex.Message}");
                 }
             }
+        }
+    }
+
+    public string Language
+    {
+        get => Preferences.Get(LanguageKey, _defaultLanguage);
+        set => Preferences.Set(LanguageKey, value);
+    }
+
+    public string TopicSeparator
+    {
+        get => Preferences.Get(TopicSeparatorKey, _defaultTopicSeparator);
+        set
+        {
+            if (string.IsNullOrEmpty(value)) return; // Cannot be blank
+            Preferences.Set(TopicSeparatorKey, value);
         }
     }
 }

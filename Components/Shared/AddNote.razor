@@ -1,11 +1,13 @@
 @using Timeline_Note_Taker.Models
+@using Timeline_Note_Taker.Models
 @inject Timeline_Note_Taker.Services.DatabaseService DbService
+@inject Timeline_Note_Taker.Services.LocalizationService Loc
 
 <div class="add-note-container">
     <textarea class="add-note-input" 
               @bind="noteContent" 
               @bind:event="oninput"
-              placeholder="What's on your mind? Start typing to add a note..."></textarea>
+              placeholder="@Loc["add_note_placeholder"]"></textarea>
     
     <div class="add-note-toolbar">
         <div class="note-type-selector">
@@ -13,7 +15,7 @@
             {
                 <button class="type-btn @(selectedType == type ? "active" : "")"
                         @onclick="() => selectedType = type">
-                    @GetTypeIcon(type) @type.ToString()
+                    @GetTypeIcon(type) @Loc[$"type_{type.ToString().ToLower()}"]
                 </button>
             }
         </div>
@@ -25,7 +27,7 @@
                    @bind="topic" 
                    @bind:event="oninput"
                    @onfocus="LoadTopics"
-                   placeholder="Topic (optional)" />
+                   placeholder="@Loc["topic_optional"]" />
             <datalist id="topic-suggestions">
                 @foreach (var existingTopic in existingTopics)
                 {
@@ -37,7 +39,7 @@
         <button class="btn btn-primary" 
                 @onclick="SaveNote"
                 disabled="@string.IsNullOrWhiteSpace(noteContent)">
-            ➕ Add Note
+            ➕ @Loc["add_note_btn"]
         </button>
     </div>
 </div>

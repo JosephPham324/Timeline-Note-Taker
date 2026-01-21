@@ -20,10 +20,10 @@ public static class MauiProgram
         // Register services
         builder.Services.AddSingleton<DatabaseService>();
         builder.Services.AddSingleton<IUrlMetadataService, UrlMetadataService>();
-        builder.Services.AddSingleton<IClipboardService, ClipboardService>();
         builder.Services.AddSingleton<SlashCommandParser>();
         builder.Services.AddSingleton<NoteEventService>();
         builder.Services.AddSingleton<ISettingsService, SettingsService>();
+        builder.Services.AddSingleton<LocalizationService>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
