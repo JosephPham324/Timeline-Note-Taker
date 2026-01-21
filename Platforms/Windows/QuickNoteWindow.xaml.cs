@@ -112,24 +112,48 @@ public sealed partial class QuickNoteWindow : WinUIWindow
 
         var clipboardContent = await _clipboardService.DetectClipboardContentAsync();
         
+        string textToInsert = "";
+        
         switch (clipboardContent.Type)
         {
             case ClipboardContentType.Text:
-                InputTextBox.Text = clipboardContent.TextContent ?? string.Empty;
+                textToInsert = clipboardContent.TextContent ?? string.Empty;
                 break;
                 
             case ClipboardContentType.Url:
-                InputTextBox.Text = clipboardContent.UrlTitle ?? clipboardContent.Url ?? string.Empty;
+                // For URLs, show URL with title in parentheses
+                var url = clipboardContent.Url ?? string.Empty;
+                var title = clipboardContent.UrlTitle;
+                
+                if (!string.IsNullOrEmpty(title) && title != url)
+                {
+                    textToInsert = $"{url} ({title})";
+                }
+                else
+                {
+                    textToInsert = url;
+                }
                 break;
                 
             case ClipboardContentType.Image:
-                // For images, just show a placeholder in the input
-                InputTextBox.Text = $"Screenshot pasted: {Path.GetFileName(clipboardContent.ImagePath)}";
+                // For images, insert with full path so NoteCard can find it
+                textToInsert = $"[Image: {clipboardContent.ImagePath}]";
                 break;
         }
 
-        // Move cursor to end
-        InputTextBox.SelectionStart = InputTextBox.Text.Length;
+        // Insert at cursor position instead of replacing everything
+        if (!string.IsNullOrEmpty(textToInsert))
+        {
+            int selectionStart = InputTextBox.SelectionStart;
+            string currentText = InputTextBox.Text ?? string.Empty;
+            
+            // Insert the text at cursor position
+            string newText = currentText.Insert(selectionStart, textToInsert);
+            InputTextBox.Text = newText;
+            
+            // Move cursor to end of inserted text
+            InputTextBox.SelectionStart = selectionStart + textToInsert.Length;
+        }
     }
 
     private async Task SaveNoteAsync()
@@ -169,7 +193,7 @@ public sealed partial class QuickNoteWindow : WinUIWindow
         }
 
         // If we just pasted an image, use that
-        if (clipboardContent.Type == ClipboardContentType.Image && input.StartsWith("Screenshot pasted:"))
+        if (clipboardContent.Type == ClipboardContentType.Image && input.Contains("[Image:"))
         {
             note.Type = NoteType.Image;
             note.AttachmentPath = clipboardContent.ImagePath;

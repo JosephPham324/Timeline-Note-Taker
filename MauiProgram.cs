@@ -23,6 +23,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IClipboardService, ClipboardService>();
         builder.Services.AddSingleton<SlashCommandParser>();
         builder.Services.AddSingleton<NoteEventService>();
+        builder.Services.AddSingleton<ISettingsService, SettingsService>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

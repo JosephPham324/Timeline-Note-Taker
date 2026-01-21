@@ -9,7 +9,6 @@ namespace Timeline_Note_Taker.WinUI
     {
         private TaskbarIcon? _trayIcon;
         private GlobalHotkeyService? _hotkeyService;
-        private QuickNoteWindow? _quickNoteWindow;
         private WinUIWindow? _mainWindow;
 
         public App()
@@ -150,9 +149,12 @@ namespace Timeline_Note_Taker.WinUI
 
         private void ShowQuickNoteWindow()
         {
-            if (_quickNoteWindow == null)
+            try
             {
-                // Get services from DI
+                System.Diagnostics.Debug.WriteLine("[QuickNote] ShowQuickNoteWindow called");
+                
+                // Always create a new window instead of reusing
+                // This prevents lifecycle issues
                 var services = IPlatformApplication.Current?.Services;
                 var databaseService = services?.GetService<DatabaseService>();
                 var clipboardService = services?.GetService<IClipboardService>();
@@ -161,14 +163,26 @@ namespace Timeline_Note_Taker.WinUI
 
                 if (databaseService != null && clipboardService != null && slashCommandParser != null && noteEventService != null)
                 {
-                    _quickNoteWindow = new QuickNoteWindow(databaseService, clipboardService, slashCommandParser, noteEventService);
+                    System.Diagnostics.Debug.WriteLine("[QuickNote] Creating new QuickNoteWindow");
+                    var quickNoteWindow = new QuickNoteWindow(databaseService, clipboardService, slashCommandParser, noteEventService);
+                    
+                    quickNoteWindow.Show();
+                    quickNoteWindow.Activate();
+                    
+                    // Force window to foreground even if app doesn't have focus
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(quickNoteWindow);
+                    NativeMethods.SetForegroundWindow(hwnd);
+                    
+                    System.Diagnostics.Debug.WriteLine("[QuickNote] QuickNoteWindow shown and activated");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[QuickNote] Failed to get required services");
                 }
             }
-
-            if (_quickNoteWindow != null)
+            catch (Exception ex)
             {
-                _quickNoteWindow.Show();
-                _quickNoteWindow.Activate();
+                System.Diagnostics.Debug.WriteLine($"[QuickNote] Error showing window: {ex.Message}\n{ex.StackTrace}");
             }
         }
 

@@ -55,8 +55,32 @@ public class GlobalHotkeyService
     {
         if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
         {
-            System.Diagnostics.Debug.WriteLine("Hotkey pressed!");
-            _hotkeyCallback?.Invoke();
+            System.Diagnostics.Debug.WriteLine($"[HOTKEY] WM_HOTKEY received! hWnd={hWnd}, wParam={wParam}, lParam={lParam}");
+            
+            // Invoke callback on the UI thread using DispatcherQueue
+            try
+            {
+                var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                if (dispatcherQueue != null)
+                {
+                    dispatcherQueue.TryEnqueue(() =>
+                    {
+                        System.Diagnostics.Debug.WriteLine("[HOTKEY] Invoking callback on UI thread");
+                        _hotkeyCallback?.Invoke();
+                    });
+                }
+                else
+                {
+                    // Fallback: invoke directly (might already be on UI thread)
+                    System.Diagnostics.Debug.WriteLine("[HOTKEY] No dispatcher, invoking directly");
+                    _hotkeyCallback?.Invoke();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[HOTKEY] Error invoking callback: {ex.Message}");
+            }
+            
             return IntPtr.Zero;
         }
 

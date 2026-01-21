@@ -6,6 +6,11 @@
 @implements IDisposable
 
 <div class="timeline-container">
+    <div class="app-header">
+        <h1>Timeline</h1>
+        <a href="/settings" class="btn btn-icon settings-btn" title="Settings">⚙️</a>
+    </div>
+
     <AddNote OnNoteSaved="OnNoteSaved" />
     
     <TimelineFilter DateFilter="@currentFilter" 
@@ -79,7 +84,10 @@
         // Refresh timeline when note is saved from Quick Note window
         await InvokeAsync(async () =>
         {
+            // Add a small delay to ensure DB write is complete and to debounce if needed
+            await Task.Delay(100);
             await OnNoteSaved();
+            StateHasChanged();
         });
     }
 

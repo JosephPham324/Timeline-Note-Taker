@@ -1,0 +1,118 @@
+@page "/settings"
+@inject Timeline_Note_Taker.Services.ISettingsService SettingsService
+@inject IJSRuntime JSRuntime
+
+<div class="settings-container">
+    <div class="header">
+        <h1>Settings</h1>
+    </div>
+
+    <div class="settings-section">
+        <h2>Storage</h2>
+        
+        <div class="form-group">
+            <label for="attachmentsPath">Attachments Location</label>
+            <div class="input-group">
+                <input type="text" id="attachmentsPath" class="form-control" @bind="attachmentsPath" />
+                <button class="btn btn-secondary" @onclick="ResetToDefault">Reset</button>
+            </div>
+            <small class="help-text">Folder where screenshots and images will be saved.</small>
+        </div>
+    </div>
+    
+    <div class="actions">
+        <a href="/" class="btn btn-secondary">← Back to Timeline</a>
+        <button class="btn btn-primary" @onclick="SaveSettings">Save Settings</button>
+    </div>
+    
+    @if (showSuccessMessage)
+    {
+        <div class="alert alert-success mt-3">
+            Settings saved successfully!
+        </div>
+    }
+</div>
+
+<style>
+    .settings-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    .settings-section {
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid var(--border);
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+    
+    .input-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .form-control {
+        flex: 1;
+        padding: 0.75rem;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+    }
+    
+    .help-text {
+        display: block;
+        margin-top: 0.5rem;
+        color: var(--text-tertiary);
+        font-size: 0.85rem;
+    }
+    
+    .btn-secondary {
+        background: var(--surface-hover);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+    }
+    
+    h2 {
+        font-size: 1.25rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+    }
+</style>
+
+@code {
+    private string attachmentsPath = "";
+    private bool showSuccessMessage = false;
+
+    protected override void OnInitialized()
+    {
+        attachmentsPath = SettingsService.AttachmentsDirectory;
+    }
+
+    private void ResetToDefault()
+    {
+        attachmentsPath = Path.Combine(FileSystem.AppDataDirectory, "attachments");
+    }
+
+    private async Task SaveSettings()
+    {
+        SettingsService.AttachmentsDirectory = attachmentsPath;
+        showSuccessMessage = true;
+        await Task.Delay(3000);
+        showSuccessMessage = false;
+    }
+}

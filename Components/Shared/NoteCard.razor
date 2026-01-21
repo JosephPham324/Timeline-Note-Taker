@@ -24,7 +24,7 @@
     }
     
     <div class="note-content @(Note.Type == NoteType.CodeSnippet ? "code-content" : "")">
-        @Note.Content
+        @((MarkupString)RenderContentWithImages(Note.Content))
     </div>
     
     @if (!string.IsNullOrEmpty(Note.Topic))
@@ -54,5 +54,53 @@
     private async Task DeleteNote()
     {
         await OnDeleted.InvokeAsync();
+    }
+    
+    // Parse [Image: path] tags and replace with actual img elements
+    private string RenderContentWithImages(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return string.Empty;
+        
+        // Basic HTML encoding for safety
+        var safeContent = System.Net.WebUtility.HtmlEncode(content);
+        
+        // But we want to preserve newlines
+        safeContent = safeContent.Replace("\n", "<br/>");
+        
+        // Regex to find [Image: path]
+        // The path might contain spaces, so we capture everything until the closing bracket
+        var matches = System.Text.RegularExpressions.Regex.Matches(content, @"\[Image:\s*(.*?)\]");
+        
+        if (matches.Count == 0) return safeContent;
+        
+        // We'll replace the encoded tags with proper HTML
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            var fullTag = match.Value;
+            var imagePath = match.Groups[1].Value;
+            var encodedTag = System.Net.WebUtility.HtmlEncode(fullTag);
+            
+            try 
+            {
+                if (System.IO.File.Exists(imagePath))
+                {
+                    var bytes = System.IO.File.ReadAllBytes(imagePath);
+                    var base64 = Convert.ToBase64String(bytes);
+                    var imgHtml = $"<div class='note-image'><img src='data:image/png;base64,{base64}' alt='Attached Image' /></div>";
+                    
+                    safeContent = safeContent.Replace(encodedTag, imgHtml);
+                }
+                else
+                {
+                    safeContent = safeContent.Replace(encodedTag, $"<div class='image-error'>Image not found: {Path.GetFileName(imagePath)}</div>");
+                }
+            }
+            catch
+            {
+                safeContent = safeContent.Replace(encodedTag, $"<div class='image-error'>Error loading image</div>");
+            }
+        }
+        
+        return safeContent;
     }
 }
